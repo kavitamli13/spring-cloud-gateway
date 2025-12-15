@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: spring-cloud-gateway
+
+  cloud:
+    gateway:
+      routes:
+        - id: google-egress
+          uri: https://www.google.com
+          predicates:
+            - Path=/external/google/**
+          filters:
+            - StripPrefix=2
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
