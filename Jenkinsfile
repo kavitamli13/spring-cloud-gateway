@@ -1,10 +1,10 @@
+
 pipeline {
     agent any
 
     environment {
         IMAGE_NAME = "docker.io/kavitamil13/spring-cloud-gateway"
-        DOCKER_CREDS = credentials('dockerhub-creds')
-        KUBECONFIG_CRED = credentials('kubeconfig')
+        K8S_NAMESPACE = "default"
     }
 
     stages {
@@ -49,10 +49,20 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withEnv(["KUBECONFIG=${KUBECONFIG_CRED}"]) {
+                withCredentials([
+                    string(credentialsId: 'k8s-token', variable: 'K8S_TOKEN'),
+                    string(credentialsId: 'k8s-api', variable: 'K8S_API')
+                ]) {
                     sh """
-                      kubectl apply -f k8s/deployment.yaml
-                      kubectl apply -f k8s/service.yaml
+                    kubectl config set-cluster k8s --server=$K8S_API --insecure-skip-tls-verify=true
+                    kubectl config set-credentials jenkins --token=$K8S_TOKEN
+                    kubectl config set-context jenkins --cluster=k8s --user=jenkins --namespace=${K8S_NAMESPACE}
+                    kubectl config use-context jenkins
+
+                    sed -i 's|DOCKER_IMAGE|${IMAGE_NAME}:${BUILD_NUMBER}|g' k8s/deployment.yaml
+
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
                     """
                 }
             }
