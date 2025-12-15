@@ -3,23 +3,31 @@ pipeline {
 
     environment {
         IMAGE_NAME = "docker.io/kavitamil13/spring-cloud-gateway"
-        K8S_NAMESPACE = "default"
+        DOCKER_CREDS = credentials('dockerhub-creds')
+        KUBECONFIG_CRED = credentials('kubeconfig')
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/kavitamli13/spring-cloud-gateway.git'
+                git credentialsId: 'github-creds',
+                    url: 'https://github.com/kavitamli13/spring-cloud-gateway.git',
+                    branch: 'main'
+            }
+        }
+
+        stage('Build Java App') {
+            steps {
+                sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
-                }
+                sh """
+                  docker build -t $IMAGE_NAME:latest .
+                """
             }
         }
 
@@ -38,22 +46,13 @@ pipeline {
             }
         }
 
+
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'k8s-token', variable: 'K8S_TOKEN'),
-                    string(credentialsId: 'k8s-api', variable: 'K8S_API')
-                ]) {
+                withEnv(["KUBECONFIG=${KUBECONFIG_CRED}"]) {
                     sh """
-                    kubectl config set-cluster k8s --server=$K8S_API --insecure-skip-tls-verify=true
-                    kubectl config set-credentials jenkins --token=$K8S_TOKEN
-                    kubectl config set-context jenkins --cluster=k8s --user=jenkins --namespace=${K8S_NAMESPACE}
-                    kubectl config use-context jenkins
-
-                    sed -i 's|DOCKER_IMAGE|${IMAGE_NAME}:${BUILD_NUMBER}|g' k8s/deployment.yaml
-
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
+                      kubectl apply -f k8s/deployment.yaml
+                      kubectl apply -f k8s/service.yaml
                     """
                 }
             }
